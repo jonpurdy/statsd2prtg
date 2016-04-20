@@ -14,14 +14,22 @@ PRTG_PROBE_ADDRESS	= "192.168.22.100:5050"
 PRTG_TOKEN			= "0CAB07F4-9DBC-49CA-BCC0-BE21C86721B9"
 
 HTTP_SERVER		= "http://httpbin.org/post"		# server to post data to
-HTTP_SERVER			= "http://%s/%s" % (PRTG_PROBE_ADDRESS, PRTG_TOKEN)		# server to post data to
+#HTTP_SERVER			= "http://%s/%s" % (PRTG_PROBE_ADDRESS, PRTG_TOKEN)		# server to post data to
 
 DO_POST				= True
-DEBUG_ALL			= True
+DEBUG_ALL			= False
 
 def main():
 
 	udp_receive()
+
+class MyStuff(object):
+
+    def __init__(self):
+        self.tangerine = "And now a thousand years between"
+
+    def apple(self):
+        print "I AM CLASSY APPLES!"
 
 def udp_receive():
 	'''
