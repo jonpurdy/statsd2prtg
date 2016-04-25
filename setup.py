@@ -4,16 +4,16 @@ except ImportError:
     from distutils.core import setup
 
 config = {
-    'description': 'My Project',
-    'author': 'My Name',
-    'url': 'URL to get it at.',
-    'download_url': 'Where to download it.',
-    'author_email': 'My email.',
+    'description': 'Listen for statsd packets and send to PRTG.',
+    'author': 'Jon Purdy',
+    'url': 'n/a',
+    'download_url': 'n/a',
+    'author_email': 'jon@knowroaming.com',
     'version': '0.1',
     'install_requires': ['nose'],
     'packages': ['NAME'],
     'scripts': [],
-    'name': 'projectname'
+    'name': 'statsd2prtg'
 }
 
 setup(**config)
