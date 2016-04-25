@@ -7,20 +7,19 @@ import re 		# for splitting strings with multiple delimeters
 import sys		# for sys.exit
 import json 	# dealing with json
 from time import sleep
+import time
+import threading
+import socketserver
 
 __version__ = '0.1'
 
 UDP_IP		 		= "127.0.0.1"					# interface to listen on
 UDP_PORT	 		= 8125							# port to listen on
-
 PRTG_PROBE_ADDRESS	= "192.168.22.100:5050"
 PRTG_TOKEN			= "0CAB07F4-9DBC-49CA-BCC0-BE21C86721B9"
-
 HTTP_SERVER			= "http://httpbin.org/post"		# server to post data to
-#HTTP_SERVER			= "http://%s/%s" % (PRTG_PROBE_ADDRESS, PRTG_TOKEN)		# server to post data to
-
-POST_INTERVAL		= 5								# seconds
-
+HTTP_SERVER			= "http://%s/%s" % (PRTG_PROBE_ADDRESS, PRTG_TOKEN)		# server to post data to
+POST_INTERVAL		= 10						# seconds
 DO_POST				= True
 DEBUG_ALL			= False
 
@@ -28,98 +27,69 @@ def main():
 
 	'''
 	Initialize the UDP server
-	Create a bucket to hold these stats
 	'''
-	sock = socket.socket(socket.AF_INET, # Internet
-						 socket.SOCK_DGRAM) # UDP
-	sock.bind((UDP_IP, UDP_PORT))
 
+	server = ThreadedUDPServer((UDP_IP, UDP_PORT), ThreadedUDPRequestHandler)
+	ip, port = server.server_address
+
+	# Start a thread with the server -- that thread will then start one
+	# more thread for each request
+	udp_server_thread = threading.Thread(target=server.serve_forever)
+	# Exit the server thread when the main thread terminates
+	udp_server_thread.setDaemon(False)
+	udp_server_thread.start()
+
+	print("Server loop running in thread:", udp_server_thread.name)
+
+	global my_bucket
 	my_bucket = Stats_Bucket()
+
+	prtg_collector_thread = threading.Thread(target=prtg_collector)
+	prtg_collector_thread.start()
+
+def prtg_collector():
+	''' Creates a bucket to collect statsd stats. Every x seconds,
+	initializes a post to http thread, passes the existing bucket to that,
+	then clears the current bucket.
+	'''
 	
+	global my_bucket
 
-	'''
-	Every UDP packet gets converted and sent into a bucket
-	'''
 	while True:
-		data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
-		print("Data received: %s\n" % data) if DEBUG_ALL else 0
 
-		'''
-		Separate the stacked packets
-		'''
-		separated = statsd_separate_packets(data.decode('UTF-8'))
-		print("Separated: %s\n" % separated) if DEBUG_ALL else 0
+		for i in range(POST_INTERVAL):
+			i += 1
+			print("i = %s" % i)
+			current_contents = my_bucket.show()
+			print()
+			sleep(1)
 
-		for item in separated:
-			#print(item) if DEBUG_ALL else 0
-			my_bucket.add(item)
+		#threading.Timer(POST_INTERVAL, post_to_prtg).start()
+		payload = my_bucket.convert_to_prtg_json()
+		my_bucket.clear()
+		http_post(payload)
 
-		# x = 0
-		# while x < 10:
-		# 	x += 1
-		# 	print(x)
-		# 	sleep(1)		
-
-		my_bucket.show()
-
-
-class Stats_Bucket(object):
-	''' Collects statsd metrics for specified time period.
+# from https://github.com/blackberry/Python/blob/master/Python-3/Doc/library/socketserver.rst
+class ThreadedUDPRequestHandler(socketserver.BaseRequestHandler):
+	''' This listens for UDP packets. If it receives them in statsd format
+	it separates them, then adds them to the statsd bucket.
 	'''
-	# def __init__(self):
-	# 	self.name = name
+	def handle(self):
+		# data = self.request.recv(1024)
+		data = self.request[0].strip()
+		socket = self.request[1]
+		# cur_thread = threading.current_thread()
+		# response = bytes("%s: %s" % (cur_thread.getName(), data),'ascii')
+		# self.request.send(response)
 
-	''' Two separate dictionaries for packets by count and by time (milliseconds)
-	'''
-	by_count	= {}
-	by_time		= {}
+		separated_packets = statsd_separate_packets(data.decode('UTF-8'))
+		print("Separated: %s\n" % separated_packets) if DEBUG_ALL else 0
 
-	def add(self, packet):
-		channel, value, unit = self.parse(packet)
+		for packet in separated_packets:
+			my_bucket.add(packet)
 
-		if unit == 'c':
-			if channel not in self.by_count:
-				self.by_count[channel] = 0
-			self.by_count[channel] += value
-		elif unit == "ms":
-			if channel not in self.by_time:
-				self.by_time[channel] = 0
-			self.by_time[channel] += value
-		else:
-			print("Unit is not c or ms.")
-		return 0
-
-	def parse(self, packet):
-		packet_as_list = packet.split(":")
-		channel = packet_as_list[0]
-		value = int(packet_as_list[1].split("|")[0])
-		unit = packet_as_list[1].split("|")[1]
-		return channel, value, unit
-
-	def show(self):
-		print(self.by_count)
-		print(self.by_time)
-
-	def clear():
-		by_count.clear()
-		by_time.clear()
-
-# def udp_receive():
-# 	'''
-# 	Receives UDP on localhost and the specified port.
-# 	Send using netcat:
-# 	nc localhost 8125
-# 	'''
-
-# 	sock = socket.socket(socket.AF_INET, # Internet
-# 						 socket.SOCK_DGRAM) # UDP
-# 	sock.bind((UDP_IP, UDP_PORT))
-
-# 	while True:
-# 		data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
-# 		json_data = statsd_convert_to_json(data.decode('UTF-8'))
-# 		http_post(json_data) if DO_POST else 0
-
+class ThreadedUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
+	pass
 
 def statsd_separate_packets(statsd_data):
 	'''
@@ -132,6 +102,7 @@ def statsd_separate_packets(statsd_data):
 
 	There is probably a faster way to do this with regex.
 	'''
+	print("statsd data: %s" % statsd_data) if DEBUG_ALL else 0
 	reassembled_list = []
 	split_statsd_data = statsd_data.split(".")
 	packet_string = ""					
@@ -146,29 +117,106 @@ def statsd_separate_packets(statsd_data):
 
 	return reassembled_list
 
-# def convert_to_json():
 
-# 		'''
-# 	We'll first create json_string, which is the basic PRTG JSON format.
-# 	Then split each item in reassembled_list, add to a new dictionary, then
-# 	append that dictionary to the existing PRTG JSON structure.
+class Stats_Bucket(object):
+	''' Collects statsd metrics for specified time period.
+	'''
+	# def __init__(self):
+	# 	self.name = name
 
-# 	Each statsd metric name contains two or three levels:
-# 	eg. rhWorker.runOnce, rh.dialogueTracker.internalContinue
-# 	PRTG can't read that anyway, so we'll just pass in the entire string
-# 	'''
-# 	json_string = '{"prtg": {"result": [{"channel": "name","value": "1","unit": "Count"}]}}'
-# 	json_data = json.loads(json_string)
+	''' Two separate dictionaries for packets by count and by time (milliseconds)
+	'''
+	by_count	= {}
 
-# 	for item in reassembled_list:
-# 		item_as_list = item.split(":")
-# 		item_dict = {}
-# 		item_dict["channel"] = item_as_list[0]
-# 		item_dict["value"] = item_as_list[1].split("|")[0]
-# 		item_dict["unit"] = item_as_list[1].split("|")[1]
-# 		json_data["prtg"]["result"].append(item_dict)
+	by_time		= {}
+	by_time_count = {}
 
-# 	return json_data
+	def add(self, packet):
+		''' Adds the packet to the bucket.
+		If it's by count, it simply adds it to the existing count.
+		If it's by time (in milliseconds), it adds to both the count of that
+		as well as the the time, so that milliseconds/count can be done to
+		calculate the mean later on.
+		'''
+		channel, value, unit = self.parse(packet)
+
+		if unit == 'c':
+			if channel not in self.by_count:
+				self.by_count[channel] = 0
+			self.by_count[channel] += value
+		elif unit == "ms":
+			if channel not in self.by_time:
+				self.by_time[channel] = 0
+				self.by_time_count[channel] = 0
+			self.by_time[channel] += value
+			self.by_time_count[channel] += 1
+			# must fix the time; need to add them up as usual, but
+			# then divide by count
+
+		else:
+			print("Unit is not c or ms. Discarding packet.")
+		return 0
+
+	def parse(self, packet):
+		packet_as_list = packet.split(":")
+		channel = packet_as_list[0]
+		value = int(packet_as_list[1].split("|")[0])
+		unit = packet_as_list[1].split("|")[1]
+		return channel, value, unit
+
+	def show(self):
+		print("# Count-based")
+		for item in self.by_count:
+			print("%s: %s count" % (item, self.by_count[item]))
+		print("# Time-based")
+		for item in self.by_time:
+			print("%s: %s ms average" % (item, round((int(self.by_time[item]))/int(self.by_time_count[item]), 1)))
+		# print("Time/Count:")
+		# for item in self.by_time_count:
+		# 	print("%s: %s" % (item, self.by_time_count[item]))
+
+
+	def convert_to_prtg_json(self):
+		'''
+		We'll first create json_string, which is the basic PRTG JSON format.
+		Then split each item in reassembled_list, add to a new dictionary, then
+		append that dictionary to the existing PRTG JSON structure.
+
+		Each statsd metric name contains two or three levels:
+		eg. rhWorker.runOnce, rh.dialogueTracker.internalContinue
+		PRTG can't read that anyway, so we'll just pass in the entire string
+		'''
+
+		# base string: '{"prtg": {"result": [{"channel": "name","value": "1","unit": "Count"}]}}'
+		json_string = '{"prtg": {"result": []}}'
+		json_data = json.loads(json_string)
+
+		print("self.by_count: %s\n" % self.by_count)
+		for entry in self.by_count:
+			item_dict = {}
+			item_dict["channel"] = entry
+			item_dict["value"] = self.by_count[entry]
+			item_dict["unit"] = "Count"
+			json_data["prtg"]["result"].append(item_dict)
+
+		print("self.by_time: %s\n" % self.by_time)
+		for entry in self.by_time:
+			item_dict = {}
+			item_dict["channel"] = entry
+			item_dict["value"] = self.by_time[entry]
+			item_dict["unit"] = "ms"
+			json_data["prtg"]["result"].append(item_dict)
+
+
+		return json_data
+
+	def clear(self):
+		self.by_count.clear()
+		self.by_time.clear()
+
+
+
+
 
 def http_post(payload):
 	'''
@@ -183,4 +231,11 @@ def http_post(payload):
 	print(r.text)
 
 if __name__ == '__main__':
-	main()
+
+	try:
+		main()
+	except (KeyboardInterrupt, SystemExit):
+		print("Exiting...")
+		sys.exit()
+	except Exception as e:
+		print(e)
