@@ -8,7 +8,7 @@ import threading
 import socketserver
 import requests # HTTP requests
 
-__version__ = '0.1'
+__version__ = '0.2'
 
 UDP_IP = "127.0.0.1" # interface to listen on
 UDP_PORT = 8125 # port to listen on
