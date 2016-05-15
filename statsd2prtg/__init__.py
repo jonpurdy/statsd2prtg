@@ -65,7 +65,7 @@ def prtg_collector():
         payload = my_bucket.convert_to_prtg_json()
         my_bucket.clear()
 
-        http_post_thread = threading.Thread(target=http_post(payload))
+        http_post_thread = threading.Thread(target=http_post, args=payload)
         http_post_thread.setDaemon(True)
         http_post_thread.start()
 
