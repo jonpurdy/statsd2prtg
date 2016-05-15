@@ -65,6 +65,9 @@ def prtg_collector():
         payload = my_bucket.convert_to_prtg_json()
         my_bucket.clear()
 
+        # XXX: How do we prevent of having too many stale HTTP processes
+        # in case PRTG doesn't respond quickly enough? Can we at least
+        # monitor it?
         http_post_thread = threading.Thread(target=http_post, args=payload)
         http_post_thread.setDaemon(True)
         http_post_thread.start()
