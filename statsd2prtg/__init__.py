@@ -62,10 +62,12 @@ def prtg_collector():
             sleep(1)
 
         #threading.Timer(POST_INTERVAL, post_to_prtg).start()
-        payload = my_bucket.convert_to_prtg_json()
-        my_bucket.clear()
+        payload = my_bucket.convert_to_prtg_json_and_clear()
 
-        http_post_thread = threading.Thread(target=http_post(payload))
+        # XXX: How do we prevent of having too many stale HTTP processes
+        # in case PRTG doesn't respond quickly enough? Can we at least
+        # monitor it?
+        http_post_thread = threading.Thread(target=http_post, args=payload)
         http_post_thread.setDaemon(True)
         http_post_thread.start()
 
@@ -85,8 +87,7 @@ class ThreadedUDPRequestHandler(socketserver.BaseRequestHandler):
         separated_packets = statsd_separate_packets(data.decode('UTF-8'))
         logging.debug("Separated: %s\n" % separated_packets)
 
-        for packet in separated_packets:
-            my_bucket.add(packet)
+        my_bucket.add_packets(separated_packets)
 
 class ThreadedUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
     pass
@@ -127,6 +128,12 @@ class Stats_Bucket(object):
 
     by_time = {}
     by_time_count = {}
+    lock = threading.Lock()
+
+    def add_packets(self, packets):
+        for packet in packets:
+            with self.lock:
+                self.add(packet)
 
     def add(self, packet):
         """Adds the packet to the bucket.
@@ -177,6 +184,11 @@ class Stats_Bucket(object):
         # for item in self.by_time_count:
         #   print("%s: %s" % (item, self.by_time_count[item]))
 
+    def convert_to_prtg_json_and_clear(self):
+        with self.lock:
+            json_data = self.convert_to_prtg_json()
+            self.clear()
+            return json_data
 
     def convert_to_prtg_json(self):
         """We'll first create json_string, which is the basic PRTG JSON format.
