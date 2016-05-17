@@ -8,7 +8,7 @@ import threading
 import socketserver
 import requests # HTTP requests
 
-__version__ = '0.2'
+__version__ = '0.3'
 
 UDP_IP = "127.0.0.1" # interface to listen on
 UDP_PORT = 8125 # port to listen on
@@ -37,6 +37,9 @@ def main():
     udp_server_thread.setDaemon(False)
     udp_server_thread.start()
 
+    logging.debug("All threads: %s" % threading.enumerate())
+    logging.debug("Current thread: %s\n\n" % threading.current_thread())
+
     logging.debug("Server loop running in thread: %s", udp_server_thread.name)
 
     global my_bucket
@@ -44,6 +47,9 @@ def main():
 
     prtg_collector_thread = threading.Thread(target=prtg_collector)
     prtg_collector_thread.start()
+
+    logging.debug("All threads: %s" % threading.enumerate())
+    logging.debug("Current thread: %s\n\n" % threading.current_thread())
 
 def prtg_collector():
     """Creates a bucket to collect statsd stats. Every x seconds,
@@ -67,7 +73,7 @@ def prtg_collector():
         # XXX: How do we prevent of having too many stale HTTP processes
         # in case PRTG doesn't respond quickly enough? Can we at least
         # monitor it?
-        http_post_thread = threading.Thread(target=http_post, args=payload)
+        http_post_thread = threading.Thread(target=http_post, args=(payload,))
         http_post_thread.setDaemon(True)
         http_post_thread.start()
 
@@ -220,7 +226,6 @@ class Stats_Bucket(object):
             item_dict["unit"] = "ms"
             json_data["prtg"]["result"].append(item_dict)
 
-
         return json_data
 
     def clear(self):
@@ -231,8 +236,9 @@ def http_post(payload):
     """Takes a payload and posts it to the HTTP_SERVER server.
     From PRTG: "Note: Postdata has to be application/x-www-form-urlencoded"
     """
-
-    logging.debug("payload: %s" % payload)
+    logging.debug("All threads: %s" % threading.enumerate())
+    logging.debug("Current thread: %s" % threading.current_thread())
+    logging.debug("payload in http_post: %s" % payload)
     #payload = {'key1': 'value1', 'key2': 'value2'}
     req = requests.post(HTTP_SERVER, data=json.dumps(payload))
     logging.debug(req.text)
