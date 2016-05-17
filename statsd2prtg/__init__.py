@@ -220,9 +220,13 @@ class Stats_Bucket(object):
 
         logging.debug("self.by_time: %s\n" % self.by_time)
         for entry in self.by_time:
+            # print("self.by_time[entry]: %s" % self.by_time[entry])
+            # print("self.by_time_count[entry]: %s" % self.by_time_count[entry])
             item_dict = {}
             item_dict["channel"] = entry
-            item_dict["value"] = self.by_time[entry]
+            # the below line divides the sum of the times (in ms) by the count
+            # of the entries
+            item_dict["value"] = self.by_time[entry]/self.by_time_count[entry]
             item_dict["unit"] = "ms"
             json_data["prtg"]["result"].append(item_dict)
 
