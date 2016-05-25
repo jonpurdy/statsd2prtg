@@ -226,7 +226,7 @@ class Stats_Bucket(object):
             item_dict["channel"] = entry
             # the below line divides the sum of the times (in ms) by the count
             # of the entries
-            item_dict["value"] = self.by_time[entry]/self.by_time_count[entry]
+            item_dict["value"] = int(self.by_time[entry]/self.by_time_count[entry])
             item_dict["unit"] = "ms"
             json_data["prtg"]["result"].append(item_dict)
 
