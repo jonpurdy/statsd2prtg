@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import os
+import configparser
 import logging
 import sys      # for sys.exit
 import json     # dealing with json
@@ -10,14 +12,34 @@ import requests # HTTP requests
 
 __version__ = '0.3'
 
+# Getting configuration first
+file_path = os.path.expanduser("~/.statsd2prtg-config")
+# configparser silently fails if the file doesn't exist
+if os.path.isfile(file_path):   
+
+    config = configparser.ConfigParser()
+
+    try:
+        config.read(file_path)
+    except Exception as e:
+        print(e)
+        print("Couldn't read configuration.")
+
+else:
+    print("Couldn't open config file. Has it been created as \'~/.statsd2prtg-config\'?")
+try:
+    PRTG_PROBE_ADDRESS = config.get('main', 'PRTG_PROBE_ADDRESS')
+    PRTG_TOKEN = config.get('main', 'PRTG_TOKEN')
+    DO_POST = config.get('main', 'DO_POST')
+except AttributeError as e:
+    print(e)
+    print("Does the file have the correct format?")
+
 UDP_IP = "127.0.0.1" # interface to listen on
 UDP_PORT = 8125 # port to listen on
-PRTG_PROBE_ADDRESS = "192.168.22.100:5050"
-PRTG_TOKEN = "0CAB07F4-9DBC-49CA-BCC0-BE21C86721B9"
-HTTP_SERVER = "http://httpbin.org/post" # server to post data to
+#HTTP_SERVER = "http://httpbin.org/post" # server to post data to
 HTTP_SERVER = "http://%s/%s" % (PRTG_PROBE_ADDRESS, PRTG_TOKEN) # server to post data to
-POST_INTERVAL = 10 # seconds
-DO_POST = True
+POST_INTERVAL = 30
 
 def main():
 
@@ -246,6 +268,28 @@ def http_post(payload):
     #payload = {'key1': 'value1', 'key2': 'value2'}
     req = requests.post(HTTP_SERVER, data=json.dumps(payload))
     logging.debug(req.text)
+
+def load_config():
+    '''
+    Loads config from config. Default is in ~/.kuiconfig.
+    '''
+
+    file_path = os.path.expanduser("~/.statsd2prtg-config")
+    # configparser silently fails if the file doesn't exist
+    if os.path.isfile(file_path):   
+    
+        config = configparser.ConfigParser()
+
+        try:
+            config.read(file_path)
+        except Exception as e:
+            print(e)
+            print("Couldn't read configuration.")
+
+        return config
+
+    else:
+        print("Couldn't open config file. Has it been created as \'~/.statsd2prtg-config\'?")
 
 if __name__ == '__main__':
 
