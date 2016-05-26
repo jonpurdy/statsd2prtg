@@ -10,7 +10,7 @@ import threading
 import socketserver
 import requests # HTTP requests
 
-__version__ = '0.3'
+__version__ = '0.3.3'
 
 # Getting configuration first
 file_path = os.path.expanduser("~/.statsd2prtg-config")
@@ -45,7 +45,7 @@ def main():
 
     # pylint: disable=C0103
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     # Initialize the UDP server
 
@@ -86,6 +86,7 @@ def prtg_collector():
         for i in range(POST_INTERVAL):
             i += 1
             logging.debug("i = %s" % i)
+            print("%s seconds until next HTTP post" % (POST_INTERVAL - i))
             my_bucket.show()
             sleep(1)
 
@@ -187,6 +188,8 @@ class Stats_Bucket(object):
 
         else:
             logging.warning("Unit: %s. Not c or ms. Discarding packet." % unit)
+            logging.warning("Packet: %s" % packet)
+            logging.warning("Channel: %s. Value: %s. Unit: %s." % (channel, value, unit))
         return 0
 
     def parse(self, packet):
@@ -201,12 +204,12 @@ class Stats_Bucket(object):
         return channel, value, unit
 
     def show(self):
-        logging.info("# Count-based")
+        logging.debug("# Count-based")
         for item in self.by_count:
-            logging.info("%s: %s count" % (item, self.by_count[item]))
-        logging.info("# Time-based")
+            logging.debug("%s: %s count" % (item, self.by_count[item]))
+        logging.debug("# Time-based")
         for item in self.by_time:
-            logging.info("%s: %s ms average" % (item, round((int(self.by_time[ 
+            logging.debug("%s: %s ms average" % (item, round((int(self.by_time[ 
                 item]))/int(self.by_time_count[item]), 1)))
         # print("Time/Count:")
         # for item in self.by_time_count:
@@ -229,7 +232,8 @@ class Stats_Bucket(object):
         """
 
         # base string: '{"prtg": {"result": [{"channel": "name","value": "1","unit": "Count"}]}}'
-        json_string = '{"prtg": {"result": []}}'
+        json_string = '{"prtg": {"result": [{"channel": "json-success","value": "1","unit": "Count"}]}}'
+        #json_string = '{"prtg": {"result": []}}'
         json_data = json.loads(json_string)
 
         logging.debug("self.by_count: %s\n" % self.by_count)
@@ -264,10 +268,11 @@ def http_post(payload):
     """
     logging.debug("All threads: %s" % threading.enumerate())
     logging.debug("Current thread: %s" % threading.current_thread())
-    logging.debug("payload in http_post: %s" % payload)
+    logging.info("Payload in http_post: %s" % payload)
     #payload = {'key1': 'value1', 'key2': 'value2'}
     req = requests.post(HTTP_SERVER, data=json.dumps(payload))
-    logging.debug(req.text)
+    logging.info("Posted to HTTP server")
+    logging.info(req.text)
 
 def load_config():
     '''
