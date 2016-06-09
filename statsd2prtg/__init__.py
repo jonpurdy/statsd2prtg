@@ -10,7 +10,7 @@ import threading
 import socketserver
 import requests # HTTP requests
 
-__version__ = '0.3.3'
+__version__ = '0.4'
 
 # Getting configuration first
 file_path = os.path.expanduser("~/.statsd2prtg-config")
@@ -31,6 +31,7 @@ try:
     PRTG_PROBE_ADDRESS = config.get('main', 'PRTG_PROBE_ADDRESS')
     PRTG_TOKEN = config.get('main', 'PRTG_TOKEN')
     DO_POST = config.get('main', 'DO_POST')
+    LOG_LOCATION = config.get('main', 'LOG_LOCATION')
 except AttributeError as e:
     print(e)
     print("Does the file have the correct format?")
@@ -45,7 +46,7 @@ def main():
 
     # pylint: disable=C0103
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(filename=LOG_LOCATION, level=logging.INFO)
 
     # Initialize the UDP server
 
@@ -86,7 +87,7 @@ def prtg_collector():
         for i in range(POST_INTERVAL):
             i += 1
             logging.debug("i = %s" % i)
-            print("%s seconds until next HTTP post" % (POST_INTERVAL - i))
+            #print("%s seconds until next HTTP post" % (POST_INTERVAL - i))
             my_bucket.show()
             sleep(1)
 
