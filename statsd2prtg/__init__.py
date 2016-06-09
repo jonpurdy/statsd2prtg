@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import os
+import configparser
 import logging
 import sys      # for sys.exit
 import json     # dealing with json
@@ -8,22 +10,43 @@ import threading
 import socketserver
 import requests # HTTP requests
 
-__version__ = '0.3'
+__version__ = '0.4'
+
+# Getting configuration first
+file_path = os.path.expanduser("~/.statsd2prtg-config")
+# configparser silently fails if the file doesn't exist
+if os.path.isfile(file_path):   
+
+    config = configparser.ConfigParser()
+
+    try:
+        config.read(file_path)
+    except Exception as e:
+        print(e)
+        print("Couldn't read configuration.")
+
+else:
+    print("Couldn't open config file. Has it been created as \'~/.statsd2prtg-config\'?")
+try:
+    PRTG_PROBE_ADDRESS = config.get('main', 'PRTG_PROBE_ADDRESS')
+    PRTG_TOKEN = config.get('main', 'PRTG_TOKEN')
+    DO_POST = config.get('main', 'DO_POST')
+    LOG_LOCATION = config.get('main', 'LOG_LOCATION')
+except AttributeError as e:
+    print(e)
+    print("Does the file have the correct format?")
 
 UDP_IP = "127.0.0.1" # interface to listen on
 UDP_PORT = 8125 # port to listen on
-PRTG_PROBE_ADDRESS = "192.168.22.100:5050"
-PRTG_TOKEN = "0CAB07F4-9DBC-49CA-BCC0-BE21C86721B9"
-HTTP_SERVER = "http://httpbin.org/post" # server to post data to
+#HTTP_SERVER = "http://httpbin.org/post" # server to post data to
 HTTP_SERVER = "http://%s/%s" % (PRTG_PROBE_ADDRESS, PRTG_TOKEN) # server to post data to
-POST_INTERVAL = 10 # seconds
-DO_POST = True
+POST_INTERVAL = 30
 
 def main():
 
     # pylint: disable=C0103
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(filename=LOG_LOCATION, level=logging.INFO)
 
     # Initialize the UDP server
 
@@ -64,6 +87,7 @@ def prtg_collector():
         for i in range(POST_INTERVAL):
             i += 1
             logging.debug("i = %s" % i)
+            #print("%s seconds until next HTTP post" % (POST_INTERVAL - i))
             my_bucket.show()
             sleep(1)
 
@@ -107,21 +131,15 @@ def statsd_separate_packets(statsd_data):
       reassembled list, then packet_string is reset
 
     There is probably a faster way to do this with regex.
+
+    >>> statsd_separate_packets("rh.sccp.in:1|c\\nrh.dialogueTracker.externalEnd:1|c\\nrh.dialogueDatabase.findToExternal:0|ms\\nrh.sccp.out:1|c\\nrh.toExternal:1|c\\nrhWorker.runOnce:1|ms")
+    ['rh.sccp.in:1|c', 'rh.dialogueTracker.externalEnd:1|c', 'rh.dialogueDatabase.findToExternal:0|ms', 'rh.sccp.out:1|c', 'rh.toExternal:1|c', 'rhWorker.runOnce:1|ms']
     """
     logging.debug("statsd data: %s" % statsd_data)
-    reassembled_list = []
-    split_statsd_data = statsd_data.split(".")
-    packet_string = ""
-    for item in split_statsd_data:
-        packet_string += item
-        if "|" in item:
-            reassembled_list.append(packet_string)
-            packet_string = ""
-        else:
-            packet_string += "."
-    logging.debug(reassembled_list)
+    split_statsd_data = statsd_data.split("\n")
+    logging.debug(split_statsd_data)
 
-    return reassembled_list
+    return split_statsd_data
 
 
 class Stats_Bucket(object):
@@ -165,12 +183,20 @@ class Stats_Bucket(object):
 
         else:
             logging.warning("Unit: %s. Not c or ms. Discarding packet." % unit)
+            logging.warning("Packet: %s" % packet)
+            logging.warning("Channel: %s. Value: %s. Unit: %s." % (channel, value, unit))
         return 0
 
     def parse(self, packet):
         """Splits the packet into channels, values, and units.
         value and unit is split further because they each contain a value and
         unit separated by a pipe.
+
+        >>> Stats_Bucket().parse('rh.sccp.in:1|c')
+        ('rh.sccp.in', 1, 'c')
+
+        >>> Stats_Bucket().parse('gorets:1|c|@0.1')
+        ('gorets', 1, 'c')
         """
         packet_as_list = packet.split(":")
         channel = packet_as_list[0]
@@ -179,12 +205,12 @@ class Stats_Bucket(object):
         return channel, value, unit
 
     def show(self):
-        logging.info("# Count-based")
+        logging.debug("# Count-based")
         for item in self.by_count:
-            logging.info("%s: %s count" % (item, self.by_count[item]))
-        logging.info("# Time-based")
+            logging.debug("%s: %s count" % (item, self.by_count[item]))
+        logging.debug("# Time-based")
         for item in self.by_time:
-            logging.info("%s: %s ms average" % (item, round((int(self.by_time[ 
+            logging.debug("%s: %s ms average" % (item, round((int(self.by_time[ 
                 item]))/int(self.by_time_count[item]), 1)))
         # print("Time/Count:")
         # for item in self.by_time_count:
@@ -207,7 +233,8 @@ class Stats_Bucket(object):
         """
 
         # base string: '{"prtg": {"result": [{"channel": "name","value": "1","unit": "Count"}]}}'
-        json_string = '{"prtg": {"result": []}}'
+        json_string = '{"prtg": {"result": [{"channel": "json-success","value": "1","unit": "Count"}]}}'
+        #json_string = '{"prtg": {"result": []}}'
         json_data = json.loads(json_string)
 
         logging.debug("self.by_count: %s\n" % self.by_count)
@@ -242,10 +269,33 @@ def http_post(payload):
     """
     logging.debug("All threads: %s" % threading.enumerate())
     logging.debug("Current thread: %s" % threading.current_thread())
-    logging.debug("payload in http_post: %s" % payload)
+    logging.info("Payload in http_post: %s" % payload)
     #payload = {'key1': 'value1', 'key2': 'value2'}
     req = requests.post(HTTP_SERVER, data=json.dumps(payload))
-    logging.debug(req.text)
+    logging.info("Posted to HTTP server")
+    logging.info(req.text)
+
+def load_config():
+    '''
+    Loads config from config. Default is in ~/.kuiconfig.
+    '''
+
+    file_path = os.path.expanduser("~/.statsd2prtg-config")
+    # configparser silently fails if the file doesn't exist
+    if os.path.isfile(file_path):   
+    
+        config = configparser.ConfigParser()
+
+        try:
+            config.read(file_path)
+        except Exception as e:
+            print(e)
+            print("Couldn't read configuration.")
+
+        return config
+
+    else:
+        print("Couldn't open config file. Has it been created as \'~/.statsd2prtg-config\'?")
 
 if __name__ == '__main__':
 
