@@ -107,21 +107,15 @@ def statsd_separate_packets(statsd_data):
       reassembled list, then packet_string is reset
 
     There is probably a faster way to do this with regex.
+
+    >>> statsd_separate_packets("rh.sccp.in:1|c\\nrh.dialogueTracker.externalEnd:1|c\\nrh.dialogueDatabase.findToExternal:0|ms\\nrh.sccp.out:1|c\\nrh.toExternal:1|c\\nrhWorker.runOnce:1|ms")
+    ['rh.sccp.in:1|c', 'rh.dialogueTracker.externalEnd:1|c', 'rh.dialogueDatabase.findToExternal:0|ms', 'rh.sccp.out:1|c', 'rh.toExternal:1|c', 'rhWorker.runOnce:1|ms']
     """
     logging.debug("statsd data: %s" % statsd_data)
-    reassembled_list = []
-    split_statsd_data = statsd_data.split(".")
-    packet_string = ""
-    for item in split_statsd_data:
-        packet_string += item
-        if "|" in item:
-            reassembled_list.append(packet_string)
-            packet_string = ""
-        else:
-            packet_string += "."
-    logging.debug(reassembled_list)
+    split_statsd_data = statsd_data.split("\n")
+    logging.debug(split_statsd_data)
 
-    return reassembled_list
+    return split_statsd_data
 
 
 class Stats_Bucket(object):
@@ -171,6 +165,12 @@ class Stats_Bucket(object):
         """Splits the packet into channels, values, and units.
         value and unit is split further because they each contain a value and
         unit separated by a pipe.
+
+        >>> Stats_Bucket().parse('rh.sccp.in:1|c')
+        ('rh.sccp.in', 1, 'c')
+
+        >>> Stats_Bucket().parse('gorets:1|c|@0.1')
+        ('gorets', 1, 'c')
         """
         packet_as_list = packet.split(":")
         channel = packet_as_list[0]
