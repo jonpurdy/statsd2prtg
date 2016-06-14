@@ -14,12 +14,13 @@ config = {
     'version': __version__,
     'install_requires': [
     'configparser',
-    'requests'
+    'requests',
+    'docopt'
     ],
-    'setup_requires': [
-    'configparser',
-    'requests'
-    ],
+    # 'setup_requires': [
+    # 'configparser',
+    # 'requests'
+    # ],
     'packages': ['statsd2prtg'],
     'scripts': [],
     'entry_points': {'console_scripts': ['statsd2prtg=statsd2prtg:main']},

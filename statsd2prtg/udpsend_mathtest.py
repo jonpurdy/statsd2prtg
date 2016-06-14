@@ -23,10 +23,10 @@ def send_test():
 	UDP_IP = "127.0.0.1"
 	UDP_PORT = 8125
 
-	MESSAGE_LIST = ["rh.sccp.in:1|c.rh.dialogueTracker.internalContinue:1|c",
-					"rh.sccp.in:1|c.rh.dialogueTracker.externalEnd:1|c",
-					"rh.dialogueDatabase.findToExternal:3|ms",
-					"rh.sccp.in:1|c.rh.dialogueDatabase.findToExternal:4|ms"]
+	MESSAGE_LIST = ["rh.sccp.in:1|c\nrh.dialogueTracker.internalContinue:1|c\n",
+					"rh.sccp.in:1|c\nrh.dialogueTracker.externalEnd:1|c\n",
+					"rh.dialogueDatabase.findToExternal:3|ms\n",
+					"rh.sccp.in:1|c\nrh.dialogueDatabase.findToExternal:4|ms\n"]
 
 	# After running through that list once:
 	# rh.sccp.in 							3
