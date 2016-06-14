@@ -21,8 +21,6 @@ import socketserver
 import requests # HTTP requests
 import docopt # parsing command line arguments
 
-__version__ = '0.5'
-
 # These shouldn't change, but here for debug if necessary
 UDP_IP = "127.0.0.1" # interface to listen on
 UDP_PORT = 8125 # port to listen on
