@@ -3,7 +3,7 @@ try:
 except ImportError:
     from distutils.core import setup
 
-from statsd2prtg import __version__
+#from statsd2prtg import __version__
 
 config = {
     'description': 'Listen for statsd packets and send to PRTG.',
@@ -11,7 +11,7 @@ config = {
     'url': 'n/a',
     'download_url': 'n/a',
     'author_email': 'jon@knowroaming.com',
-    'version': __version__,
+    'version': 0.6,
     'install_requires': [
     'configparser',
     'requests',
@@ -23,7 +23,7 @@ config = {
     # ],
     'packages': ['statsd2prtg'],
     'scripts': [],
-    'entry_points': {'console_scripts': ['statsd2prtg=statsd2prtg:main']},
+    'entry_points': {'console_scripts': ['statsd2prtg=statsd2prtg.__main__:main']},
     'name': 'statsd2prtg'
 }
 
