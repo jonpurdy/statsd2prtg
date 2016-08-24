@@ -170,7 +170,14 @@ class Stats_Bucket(object):
 
     by_time = {}
     by_time_count = {}
+    by_time_minmax = {}
     lock = threading.Lock()
+
+    def minKey(self, key):
+        return key + ".min"
+
+    def maxKey(self, key):
+        return key + ".max"
 
     def add_packets(self, packets):
         for packet in packets:
@@ -183,6 +190,54 @@ class Stats_Bucket(object):
         If it's by time (in milliseconds), it adds to both the count of that
         as well as the the time, so that milliseconds/count can be done to
         calculate the mean later on.
+
+        # Create bucket, add values, print, export, check it is cleared
+        >>> bucket = Stats_Bucket()
+        >>> bucket.add('rh.sccp.in:4|ms')
+        0
+        >>> bucket.add('rh.sccp.in:3|ms')
+        0
+        >>> bucket.add('rh.sccp.in:5|ms')
+        0
+        >>> bucket.add('rh.sccp.in:10|ms')
+        0
+        >>> bucket.show()
+        >>> bucket.show_on(print)
+        Count-based:
+        Time-based:
+        rh.sccp.in: 5.5 ms average 3 ms min 10 ms max
+        >>> sorted(bucket.by_time.keys())
+        ['rh.sccp.in']
+        >>> sorted(bucket.by_time_minmax.keys())
+        ['rh.sccp.in.max', 'rh.sccp.in.min']
+        >>> res = bucket.convert_to_prtg_json_and_clear()
+        >>> sorted(bucket.by_time.keys())
+        []
+        >>> sorted(bucket.by_time_minmax.keys())
+        []
+        >>> sorted(res.keys())
+        ['prtg']
+        >>> res = res['prtg']['result']
+        >>> len(res)
+        4
+        >>> res = sorted(res, key=lambda x: x['channel'])
+        >>> for key in sorted(res[0].keys()): print(key, res[0][key])
+        channel json-success
+        unit Count
+        value 1
+        >>> for key in sorted(res[1].keys()): print(key, res[1][key])
+        channel rh.sccp.in
+        customunit msec
+        unit Custom
+        value 5
+        >>> for key in sorted(res[2].keys()): print(key, res[2][key])
+        channel rh.sccp.in.max
+        unit msec
+        value 10
+        >>> for key in sorted(res[3].keys()): print(key, res[3][key])
+        channel rh.sccp.in.min
+        unit msec
+        value 3
         """
         channel, value, unit = self.parse(packet)
 
@@ -194,10 +249,17 @@ class Stats_Bucket(object):
             if channel not in self.by_time:
                 self.by_time[channel] = 0
                 self.by_time_count[channel] = 0
+                self.by_time_minmax[self.minKey(channel)] = sys.maxsize
+                self.by_time_minmax[self.maxKey(channel)] = 0
             self.by_time[channel] += value
             self.by_time_count[channel] += 1
             # must fix the time; need to add them up as usual, but
             # then divide by count
+
+            if self.by_time_minmax[self.minKey(channel)] > value:
+                self.by_time_minmax[self.minKey(channel)] = value
+            if self.by_time_minmax[self.maxKey(channel)] < value:
+                self.by_time_minmax[self.maxKey(channel)] = value
 
         else:
             logging.warning("Unit: %s. Not c or ms. Discarding packet." % unit)
@@ -223,13 +285,16 @@ class Stats_Bucket(object):
         return channel, value, unit
 
     def show(self):
-        logging.debug("Count-based:")
+        return self.show_on(logging.debug)
+
+    def show_on(self, output):
+        output("Count-based:")
         for item in self.by_count:
-            logging.debug("%s: %s count" % (item, self.by_count[item]))
-        logging.debug("Time-based:")
+            output("%s: %s count" % (item, self.by_count[item]))
+        output("Time-based:")
         for item in self.by_time:
-            logging.debug("%s: %s ms average" % (item, round((int(self.by_time[ 
-                item]))/int(self.by_time_count[item]), 1)))
+            output("%s: %s ms average %s ms min %s ms max" % (item, round((int(self.by_time[
+                item]))/int(self.by_time_count[item]), 1), self.by_time_minmax[self.minKey(item)], self.by_time_minmax[self.maxKey(item)]))
         # print("Time/Count:")
         # for item in self.by_time_count:
         #   print("%s: %s" % (item, self.by_time_count[item]))
@@ -276,11 +341,21 @@ class Stats_Bucket(object):
             item_dict["customunit"] = "msec"
             json_data["prtg"]["result"].append(item_dict)
 
+        logging.debug("self.by_time_minmax: %s\n" % self.by_time)
+        for entry in self.by_time_minmax:
+            item_dict = {}
+            item_dict["channel"] = entry
+            item_dict["value"] = self.by_time_minmax[entry]
+            item_dict["unit"] = "Custom"
+            item_dict["unit"] = "msec"
+            json_data["prtg"]["result"].append(item_dict)
+
         return json_data
 
     def clear(self):
         self.by_count.clear()
         self.by_time.clear()
+        self.by_time_minmax.clear()
 
 def http_post(payload):
     """Takes a payload and posts it to the HTTP_SERVER server.
